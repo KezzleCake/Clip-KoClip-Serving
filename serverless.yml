@@ -1,0 +1,30 @@
+service: kezzle-clip-koclip-serving
+frameworkVersion: "3"
+
+provider:
+    name: aws
+    runtime: python3.11
+    stage: dev
+    region: ap-northeast-2
+    ecr:
+        images:
+            koclip-image:
+                path: ./ko_image_vectorizer
+                platform: linux/amd64
+            clip-image:
+                path: ./image_vectorizer
+                platform: linux/amd64
+
+functions:
+    image-vectorizer:
+        architecture: x86_64
+        image:
+            name: clip-image
+        timeout: 180
+        memorySize: 1536
+    ko-image-vectorizer:
+        architecture: x86_64
+        image:
+            name: koclip-image
+        timeout: 180
+        memorySize: 1536
