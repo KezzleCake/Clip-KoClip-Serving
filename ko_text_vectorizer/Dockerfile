@@ -11,4 +11,5 @@ COPY app/main.py ./
 COPY model/koclip.py ./
 RUN python3 koclip.py
 
+
 CMD ["main.lambda_handler"]

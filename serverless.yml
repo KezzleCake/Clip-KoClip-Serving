@@ -1,4 +1,4 @@
-service: kezzle-clip-koclip-serving
+service: kezzle-clip-serving
 frameworkVersion: "3"
 
 provider:
@@ -14,6 +14,12 @@ provider:
             clip-image:
                 path: ./image_vectorizer
                 platform: linux/amd64
+            koclip-keyword:
+                path: ./ko_text_vectorizer
+                platform: linux/amd64
+            clip-keyword:
+                path: ./text_vectorizer
+                platform: linux/amd64
 
 functions:
     image-vectorizer:
@@ -27,4 +33,24 @@ functions:
         image:
             name: koclip-image
         timeout: 180
+        memorySize: 1536
+    keyword-vectorizer:
+        architecture: x86_64
+        image:
+            name: clip-keyword
+        events:
+            - http:
+                  path: /keyword
+                  method: post
+        timeout: 30
+        memorySize: 1536
+    ko-keyword-vectorizer:
+        architecture: x86_64
+        image:
+            name: koclip-keyword
+        events:
+            - http:
+                  path: /ko-keyword
+                  method: post
+        timeout: 30
         memorySize: 1536
