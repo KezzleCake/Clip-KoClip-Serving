@@ -25,3 +25,6 @@ tqdm==4.66.1
 transformers==4.32.1
 typing_extensions==4.7.1
 urllib3==2.0.4
+dnspython==2.4.2
+faiss-cpu==1.7.4
+pymongo==4.5.0

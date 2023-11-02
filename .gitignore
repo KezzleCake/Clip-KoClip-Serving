@@ -228,3 +228,8 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode,macos
 
 .serverless
+mongo-env.yml
+efs-env.yml
+*.index
+main copy.py
+clip-vit-base-patch32-ko
