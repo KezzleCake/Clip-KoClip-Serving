@@ -11,55 +11,23 @@ provider:
             koclip-image:
                 path: ./ko_image_vectorizer
                 platform: linux/amd64
-            clip-image:
-                path: ./image_vectorizer
-                platform: linux/amd64
             koclip-keyword-search:
-                path: ./ko_text_vectorizer
+                path: ./ko_text_search
                 platform: linux/amd64
             koclip-keyword-search-pagination:
                 path: ./ko_text_search_pagination
-                platform: linux/amd64
-            clip-keyword-search:
-                path: ./text_vectorizer
                 platform: linux/amd64
 
 custom:
     mongo: ${file(./mongo-env.yml)}
 
 functions:
-    image-vectorizer:
-        architecture: x86_64
-        image:
-            name: clip-image
-        timeout: 180
-        memorySize: 1536
     ko-image-vectorizer:
         architecture: x86_64
         image:
             name: koclip-image
         timeout: 180
         memorySize: 1536
-    keyword-search:
-        architecture: x86_64
-        image:
-            name: clip-keyword-search
-        events:
-            - http:
-                  path: /cakes/search
-                  method: get
-        timeout: 60
-        memorySize: 1536
-        environment: ${self:custom.mongo}
-        fileSystemConfig:
-            localMountPath: ${file(./efs-env.yml):MOUNT_PATH}
-            arn: ${file(./efs-env.yml):EFSARN}
-        vpc:
-            securityGroupIds:
-                - ${file(./efs-env.yml):SGID}
-            subnetIds:
-                - ${file(./efs-env.yml):SUBNETID1}
-                - ${file(./efs-env.yml):SUBNETID2}
     ko-keyword-search:
         architecture: x86_64
         image:

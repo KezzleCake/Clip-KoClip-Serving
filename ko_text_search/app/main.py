@@ -17,16 +17,35 @@ conn = pymongo.MongoClient(host=os.environ.get('MONGO_HOST'), port=int(os.enviro
 db = conn[os.environ.get('MONGO_DBNAME')]
 
 koclip_index = faiss.read_index(os.environ.get('INDEX_SAVE_PATH') + '/koclip.index')
+total_documents = koclip_index.ntotal
 
-def get_vector(keyword):
+def to_json(bson: dict, score: float=None) -> dict:
+    json = {}
+    json['_id'] = str(bson['_id'])
+    json['image'] = bson['image']
+    json['cursor'] = bson['cursor']
+    json['createdAt'] = str(bson['createdAt'])
+    json['updatedAt'] = str(bson['updatedAt'])
+    json['faiss_id'] = bson['faiss_id']
+    json['tag_ins'] = bson['tag_ins']
+    json['owner_store_id'] = bson['owner_store_id']
+    json['user_like_ids'] = bson['user_like_ids']
+    json['score'] = score
+
+    return json
+
+def get_vector(keyword: str) -> np.ndarray:
     keyword = processor(text=keyword, return_tensors="pt")
 
     with torch.inference_mode():
         vectors = model.get_text_features(**keyword)
     return vectors.numpy()
 
+def lambda_handler(event: dict, context: dict) -> dict:
+    if db.counters.find_one({'sequenceName': 'cakes'})['seq'] != total_documents:
+        global koclip_index
+        koclip_index = faiss.read_index(os.environ.get('INDEX_SAVE_PATH') + '/koclip.index')
 
-def lambda_handler(event, context):
     try:
         queries = event['queryStringParameters']
         keyword = queries['keyword']
@@ -35,26 +54,15 @@ def lambda_handler(event, context):
 
         distances, indices = koclip_index.search(keyword_vector, size)
 
-        result_document = []
+        distances_list = distances[0][:size].tolist()
+        faiss_ids = indices[0][:size].tolist()
 
+        zip_data = list(zip(distances_list, faiss_ids))
+        zip_data.sort(key=lambda x: x[1])
 
-        for i, index in enumerate(indices[0]):
-            cake_document = db.cakes.find_one({'faiss_id': index.item()})
-            if cake_document is None:
-                continue
-            cake_document['_id'] = str(cake_document['_id'])
-            cake_document['createdAt'] = str(cake_document['createdAt'])
-            cake_document['updatedAt'] = str(cake_document['updatedAt'])
-            cake_document['similiarity'] = distances[0][i].item()
-
-            document_keys = cake_document.keys()
-
-            if ('vit' in document_keys):
-                del cake_document['vit']
-            if ('koclip' in document_keys):
-                del cake_document['koclip']
-
-            result_document.append(cake_document)
+        cake_documents = list(zip(zip_data, list(db.cakes.find({'faiss_id' : {'$in': faiss_ids}}).sort('faiss_id', pymongo.ASCENDING))))
+        cake_documents.sort(key=lambda x: -x[0][0])
+        cake_documents = list(map(lambda x: to_json(x[1], x[0][0]), cake_documents))
 
         return {
             "statusCode": 200,
@@ -62,7 +70,7 @@ def lambda_handler(event, context):
                 "Content-Type": "application/json; charset=utf-8"
             },
             "body": json.dumps({
-                "result": result_document
+                "result": cake_documents
             })
         }
     except Exception as e:
@@ -70,13 +78,3 @@ def lambda_handler(event, context):
         return {
             "statusCode": 400,
         }
-
-# start_time = time.time()
-# print(
-# lambda_handler({
-#     "queryStringParameters": {
-#         "keyword": "딸기",
-#         "size": 6
-#     }
-# }, None))
-# print("--- 함수 실행 시간 %s seconds ---" % (time.time() - start_time))
