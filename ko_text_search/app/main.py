@@ -30,7 +30,7 @@ def to_json(bson: dict, score: float=None) -> dict:
     json['tag_ins'] = bson['tag_ins']
     json['owner_store_id'] = bson['owner_store_id']
     json['user_like_ids'] = bson['user_like_ids']
-    json['score'] = score
+    json['score'] = score if score is not None else bson['score']
 
     return json
 
@@ -41,10 +41,46 @@ def get_vector(keyword: str) -> np.ndarray:
         vectors = model.get_text_features(**keyword)
     return vectors.numpy()
 
+def get_cake_pipeline(size: int, sorted_distance: list, faiss_ids: list, count_delete: int):
+
+    return [
+		{
+            '$match': {
+                '$and': [
+                    {'is_delete': False},
+                    {'faiss_id': {'$in': faiss_ids[:(size + count_delete)]}}
+                ]
+            }
+		},
+		{
+            '$project': {
+                'vit': 0,
+                'koclip': 0
+            }
+		},
+		{
+            '$addFields': {
+                'score': {
+                    '$arrayElemAt': [sorted_distance, '$faiss_id']
+                }
+            }
+		},
+		{
+            '$sort': {
+                'score': -1
+            }
+		},
+		{
+			'$limit': size
+		}
+    ]
+
 def lambda_handler(event: dict, context: dict) -> dict:
-    if db.counters.find_one({'sequenceName': 'cakes'})['seq'] != total_documents:
+    if db.counters.find_one({'sequenceName': 'cakes'})['seq'] + 1 != total_documents:
         global koclip_index
+        global total_documents
         koclip_index = faiss.read_index(os.environ.get('INDEX_SAVE_PATH') + '/koclip.index')
+        total_documents = koclip_index.ntotal
 
     try:
         queries = event['queryStringParameters']
@@ -52,17 +88,19 @@ def lambda_handler(event: dict, context: dict) -> dict:
         keyword_vector = get_vector(keyword)
         size = int(queries['size'])
 
-        distances, indices = koclip_index.search(keyword_vector, size)
+        count_delete = db.cakes.count_documents({'is_delete': True})
 
-        distances_list = distances[0][:size].tolist()
-        faiss_ids = indices[0][:size].tolist()
+        distances, indices = koclip_index.search(keyword_vector, koclip_index.ntotal)
+
+        distances_list = distances[0].tolist()
+        faiss_ids = indices[0].tolist()
 
         zip_data = list(zip(distances_list, faiss_ids))
         zip_data.sort(key=lambda x: x[1])
+        sorted_distances = list(map(lambda x: x[0], zip_data))
 
-        cake_documents = list(zip(zip_data, list(db.cakes.find({'faiss_id' : {'$in': faiss_ids}}).sort('faiss_id', pymongo.ASCENDING))))
-        cake_documents.sort(key=lambda x: -x[0][0])
-        cake_documents = list(map(lambda x: to_json(x[1], x[0][0]), cake_documents))
+        cake_documents = list(db.cakes.aggregate(get_cake_pipeline(size, sorted_distances, faiss_ids, count_delete)))
+        cake_documents = list(map(lambda x: to_json(x), cake_documents))
 
         return {
             "statusCode": 200,
@@ -74,7 +112,8 @@ def lambda_handler(event: dict, context: dict) -> dict:
             })
         }
     except Exception as e:
-        print(e)
+        import traceback
+        traceback.print_exc()
         return {
             "statusCode": 400,
         }
